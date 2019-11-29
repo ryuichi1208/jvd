@@ -1,0 +1,101 @@
+# -----------------------------
+# General
+# -----------------------------
+export EDITOR=vim
+export PATH="$HOME/bin:$PATH"
+export RSYNC_RSH=ssh
+export LSCOLORS=Exfxcxdxbxegedabagacad
+export LS_COLORS='di=01;34:ln=01;35:so=01;32:ex=01;31:bd=46;34:cd=43;34:su=41;30:sg=46;30:tw=42;30:ow=43;30'
+export HISTFILE=$HOME/.zsh-history
+export HISTSIZE=100000
+export SAVEHIST=1000000
+
+bindkey -e
+
+setopt auto_pushd
+setopt pushd_ignore_dups
+setopt no_flow_control
+setopt extended_glob
+setopt auto_cd
+setopt auto_pushd
+setopt pushd_ignore_dups
+setopt no_beep
+setopt auto_param_keys
+setopt auto_cd
+setopt notify
+setopt print_eight_bit
+setopt print_exit_value
+setopt mark_dirs
+setopt correct
+setopt correct_all
+setopt no_clobber
+setopt noautoremoveslash
+setopt complete_in_word
+setopt correct
+setopt list_packed
+setopt magic_equal_subst
+setopt histignorealldups
+setopt share_history
+setopt hist_ignore_all_dups
+setopt hist_reduce_blanks
+setopt inc_append_history
+setopt hist_verify
+
+autoload -Uz colors ; colors
+autoload -Uz compinit ; compinit
+autoload -U colors ; colors ; zstyle ':completion:*' list-colors "${LS_COLORS}"
+
+zstyle ':completion:*:sudo:*' command-path /usr/local/sbin /usr/local/bin \
+                   /usr/sbin /usr/bin /sbin /bin /usr/X11R6/bin
+zstyle ':completion:*:processes' command 'ps x -o pid,s,args'
+zstyle ':completion:*' menu select
+zstyle ':completion::complete:*' use-cache true
+zstyle ':completion:*' matcher-list 'm:{a-z}={A-Z}'
+zstyle ':completion:*:manuals' separate-sections true
+
+# -----------------------------
+# Alias
+# -----------------------------
+alias -g L='| less'
+alias -g H='| head'
+alias -g G='| grep'
+alias -g GI='| grep -ri'
+
+alias lst='ls -ltr --color=auto'
+alias ls='ls --color=auto'
+alias la='ls -la --color=auto'
+alias ll='ls -l --color=auto'
+alias du="du -Th"
+alias df="df -Th"
+alias su="su -l"
+alias so='source'
+alias vi='vim'
+alias vz='vim ~/.zshrc'
+alias c='cdr'
+alias cp='cp -i'
+alias rm='rm -i'
+alias mkdir='mkdir -p'
+alias ..='c ../'
+alias back='pushd'
+alias diff='diff -U1'
+alias h='fc -lt '%F %T' 1'
+
+# -----------------------------
+# Plugin
+# -----------------------------
+source ~/.zplug/init.zsh
+
+zplug "zsh-users/zsh-completions"
+zplug "zsh-users/zsh-autosuggestions"
+zplug "zsh-users/zsh-syntax-highlighting", defer:2
+zplug "b4b4r07/enhancd", use:init.sh
+
+if ! zplug check --verbose; then
+  printf "Install? [y/N]: "
+  if read -q; then
+      echo; zplug install
+  fi
+fi
+
+zplug load --verbose
+

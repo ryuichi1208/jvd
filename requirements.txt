@@ -1,0 +1,6 @@
+pytest==5.2.2
+Flask==1.1.1
+Flask-HTTPAuth==3.3.0
+Flask-Sockets==0.2.1
+line-bot-sdk==1.14.0
+grequests
