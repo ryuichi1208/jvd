@@ -1,0 +1,158 @@
+version: 2
+jobs:
+  dockerfile_lint:
+    machine:
+      enabled: true
+      image: ubuntu-1604:201903-01
+    steps:
+    - checkout
+    - run:
+        name: Dockerfile lint(hadolint)
+        command: |
+          sudo apt apdate && apt upgrade && apt install jq
+          docker run --rm -i hadolint/hadolint hadolint --version
+          docker run --rm -i hadolint/hadolint hadolint - --format json < Dockerfile | jq . || echo 0
+  build_and_save:
+    machine:
+      enabled: true
+      image: ubuntu-1604:201903-01
+    steps:
+    - checkout
+    - run:
+        command: echo machine
+    - run:
+        command: ./script/init_env.sh
+    - run:
+        command: ./script/print_info.sh
+    - run:
+        name: Docker image build
+        command: |
+          export DOCKER_BUILDKIT=1 && docker image build -t ${CIRCLE_USERNAME}/${CIRCLE_PROJECT_REPONAME} --rm=true .
+    - run:
+        command: docker image ls --all
+    - run:
+        name: Docker image save
+        command: |
+          mkdir -p /tmp/docker && docker image save ${CIRCLE_USERNAME}/${CIRCLE_PROJECT_REPONAME} -o /tmp/docker/jvd.docker
+    - persist_to_workspace:
+        root: /tmp/docker
+        paths:
+        - jvd.docker
+  web_srv_test:
+    docker:
+    - image: python:3.8.0-alpine3.10
+    steps:
+    - checkout
+    - run:
+        name: Init test enviroment
+        command: |
+          apk add gcc linux-headers musl-dev
+          pip install -U pip
+          pip install -r requirements.txt
+          pytest -vv
+  security_inspect:
+    machine:
+      enabled: true
+      image: ubuntu-1604:201903-01
+    steps:
+    - attach_workspace:
+        at: /tmp/docker
+    - restore_cache:
+        keys:
+        - m2-{{ .Branch }}-{{ arch }}-trivy_deb
+    - run:
+        name: Install trivy and dockle
+        command: |
+          wget https://github.com/aquasecurity/trivy/releases/download/v0.1.7/trivy_0.1.7_Linux-64bit.tar.gz
+          tar zxvf trivy_0.1.7_Linux-64bit.tar.gz
+          sudo mv trivy /usr/local/bin
+          wget https://github.com/goodwithtech/dockle/releases/download/v0.2.3/dockle_0.2.3_Linux-64bit.tar.gz
+          tar zxvf dockle_0.2.3_Linux-64bit.tar.gz
+          sudo mv dockle /usr/local/bin
+          which trivy
+          which dockle
+    - run:
+        name: Restore container
+        command: |
+          docker load -i /tmp/docker/${CIRCLE_PROJECT_REPONAME}.docker
+          docker image ls --all
+    - run:
+        name: Exec trivy
+        command: |
+          mkdir -p /tmp/trivy
+          trivy --exit-code 0 --severity HIGH,CRITICAL  --quiet --auto-refresh ${CIRCLE_USERNAME}/${CIRCLE_PROJECT_REPONAME}
+    - save_cache:
+        key: m2-{{ .Branch }}-{{ arch }}-trivy_deb
+        paths:
+        - ${HOME}/.cache/trivy
+    - run:
+        name: Exec dockle
+        command: |
+          dockle --exit-code 0 ${CIRCLE_USERNAME}/${CIRCLE_PROJECT_REPONAME}
+  restore_and_test:
+    machine:
+      enabled: true
+      image: ubuntu-1604:201903-01
+    steps:
+    - attach_workspace:
+        at: /tmp/docker
+    - run:
+        command: |
+          docker load -i /tmp/docker/${CIRCLE_PROJECT_REPONAME}.docker
+          docker image ls --all
+          docker container run --rm -it ${CIRCLE_USERNAME}/${CIRCLE_PROJECT_REPONAME} -c "vim --version"
+  deploy_vim_container:
+    machine:
+      enabled: true
+      image: ubuntu-1604:201903-01
+    steps:
+    - attach_workspace:
+        at: /tmp/docker
+    - run:
+        name: DockerHub deploy
+        command: |
+          docker load -i /tmp/docker/${CIRCLE_PROJECT_REPONAME}.docker
+          docker image ls --all
+          docker login -u ${CIRCLE_USERNAME} -p ${DOCKERHUB_PASS}
+          docker tag ${CIRCLE_USERNAME}/${CIRCLE_PROJECT_REPONAME} ${CIRCLE_USERNAME}/${CIRCLE_PROJECT_REPONAME}:${CIRCLE_TAG}
+          docker image ls
+          docker image push ${CIRCLE_USERNAME}/${CIRCLE_PROJECT_REPONAME}:${CIRCLE_TAG}
+          docker image push ${CIRCLE_USERNAME}/${CIRCLE_PROJECT_REPONAME}:latest
+workflows:
+  version: 2
+  jvd_workflow:
+    jobs:
+    - dockerfile_lint:
+        filters:
+          tags:
+            only: /^v[0-9]+(\.[0-9]+){2}$/
+    - build_and_save:
+        filters:
+          tags:
+            only: /^v[0-9]+(\.[0-9]+){2}$/
+        requires:
+        - dockerfile_lint
+    - web_srv_test:
+        requires:
+        - build_and_save
+    - security_inspect:
+        filters:
+          tags:
+            only: /^v[0-9]+(\.[0-9]+){2}$/
+        requires:
+        - build_and_save
+    - restore_and_test:
+        filters:
+          tags:
+            only: /^v[0-9]+(\.[0-9]+){2}$/
+        requires:
+        - build_and_save
+        - web_srv_test
+    - deploy_vim_container:
+        filters:
+          branches:
+            ignore: /.*/
+          tags:
+            only: /^v[0-9]+(\.[0-9]+){2}$/
+        requires:
+        - restore_and_test
